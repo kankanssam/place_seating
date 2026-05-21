@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스마트 교실 자리 배치기</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts Inter & Noto Sans KR -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Noto Sans KR', 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        /* 드래그 상태 스타일링 */
+        .dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+        .drag-over {
+            border-color: #4f46e5 !important;
+            background-color: #e0e7ff !important;
+        }
+        /* 셔플 시각 연출을 위한 흔들림 애니메이션 */
+        @keyframes subtle-shake {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            20% { transform: translate(-1px, 1px) rotate(-0.5deg); }
+            40% { transform: translate(1px, -1px) rotate(0.5deg); }
+            60% { transform: translate(-1px, -1px) rotate(-0.3deg); }
+            80% { transform: translate(1px, 1px) rotate(0.3deg); }
+        }
+        .animate-shake {
+            animation: subtle-shake 0.15s infinite;
+        }
+        /* 프린트 스타일 */
+        @media print {
+            body {
+                background-color: white;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-area {
+                width: 100% !important;
+                max-width: 100% !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            .desk-card {
+                border: 1px solid #cbd5e1 !important;
+                box-shadow: none !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 transition-colors duration-200">
+
+    <div class="max-w-7xl mx-auto px-4 py-6 md:py-10 flex flex-col min-h-screen justify-between">
+        <!-- 상단 헤더 (no-print) -->
+        <header class="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 no-print border-b border-slate-200 pb-6">
+            <div>
+                <div class="flex items-center gap-3">
+                    <div class="bg-indigo-600 text-white p-2.5 rounded-xl shadow-md shadow-indigo-100">
+                        <i class="fa-solid fa-graduation-cap text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">스마트 자리 배치기</h1>
+                        <p class="text-sm text-slate-500 mt-0.5">드래그 앤 드롭과 블라인드로 완성하는 재미있고 스마트한 교실 배치 서비스</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <!-- 프린트 버튼 -->
+                <button onclick="window.print()" class="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-medium rounded-xl text-sm transition-all shadow-sm flex items-center gap-2">
+                    <i class="fa-solid fa-print text-slate-400"></i>
+                    <span>인쇄 / PDF 저장</span>
+                </button>
+                <button onclick="resetAll()" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium rounded-xl text-sm transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>전체 초기화</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- 메인 콘텐츠 영역 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-auto">
+            
+            <!-- 왼쪽 제어 패널 (no-print) -->
+            <aside class="lg:col-span-4 space-y-6 no-print">
+                <!-- 1. 학생 데이터 설정 카드 -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+                    <div class="flex items-center gap-2 pb-3 border-b border-slate-100">
+                        <span class="w-2 h-5 bg-indigo-600 rounded-full"></span>
+                        <h2 class="font-bold text-slate-900 text-lg">학생 구성원 관리</h2>
+                    </div>
+
+                    <!-- 입력 모드 전환 -->
+                    <div class="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl">
+                        <button id="mode-names" onclick="switchInputMode('names')" class="py-2 text-sm font-semibold rounded-lg text-indigo-700 bg-white shadow-sm transition-all">이름 직접 입력</button>
+                        <button id="mode-count" onclick="switchInputMode('count')" class="py-2 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-800 transition-all">학생 수만 입력</button>
+                    </div>
+
+                    <!-- 이름 직접 입력 섹션 -->
+                    <div id="section-names" class="space-y-2">
+                        <label class="block text-xs font-bold uppercase text-slate-400 tracking-wider">학생 명단 (줄바꿈 또는 쉼표 구분)</label>
+                        <textarea id="students-list" rows="6" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm placeholder-slate-400 transition-all outline-none" placeholder="김철수&#10;이영희&#10;박민수&#10;최수진"></textarea>
+                        <div class="flex justify-between items-center text-xs text-slate-500">
+                            <span id="name-count-display">작성한 학생: 0명</span>
+                            <button onclick="loadDemoClass()" class="text-indigo-600 hover:text-indigo-800 font-medium">데모 학급 불러오기</button>
+                        </div>
+                    </div>
+
+                    <!-- 학생 수만 입력 섹션 (기본 숨김) -->
+                    <div id="section-count" class="space-y-2 hidden">
+                        <label class="block text-xs font-bold uppercase text-slate-400 tracking-wider">배치할 학생 수</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" id="students-count-input" min="1" max="60" value="30" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition-all">
+                            <span class="text-sm font-medium text-slate-600 whitespace-nowrap">명</span>
+                        </div>
+                        <p class="text-xs text-slate-400">"1번 학생, 2번 학생..." 형태로 즉시 자동 생성되어 배치됩니다.</p>
+                    </div>
+                </div>
+
+                <!-- 2. 자리 형태 및 기능 설정 카드 -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+                    <div class="flex items-center gap-2 pb-3 border-b border-slate-100">
+                        <span class="w-2 h-5 bg-indigo-600 rounded-full"></span>
+                        <h2 class="font-bold text-slate-900 text-lg">자리 형태 & 기능 설정</h2>
+                    </div>
+
+                    <!-- 자리 열 개수 설정 -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center">
+                            <label class="block text-xs font-bold uppercase text-slate-400 tracking-wider">가로 열(Column) 개수</label>
+                            <span id="col-val" class="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-100">6열 배치</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <input type="range" id="columns-range" min="2" max="12" value="6" oninput="updateColumns(this.value)" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus:outline-none">
+                        </div>
+                        <div class="flex justify-between text-xs text-slate-400 px-1">
+                            <span>2열</span>
+                            <span>4열</span>
+                            <span>6열</span>
+                            <span>8열</span>
+                            <span>10열</span>
+                            <span>12열</span>
+                        </div>
+                    </div>
+
+                    <!-- 정렬 옵션 -->
+                    <div class="space-y-3 pt-2">
+                        <label class="block text-xs font-bold uppercase text-slate-400 tracking-wider">자리 정렬 방향</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="view-front" onclick="switchViewMode('front')" class="py-2 px-3 border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all">
+                                <i class="fa-solid fa-chalkboard"></i> 앞(칠판) 기준
+                            </button>
+                            <button id="view-back" onclick="switchViewMode('back')" class="py-2 px-3 border border-slate-200 bg-white text-slate-600 font-medium rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-slate-50 transition-all">
+                                <i class="fa-solid fa-arrows-up-down"></i> 교실 뒤쪽 기준
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 신규: 이름 블라인드 옵션 -->
+                    <div class="space-y-3 pt-4 border-t border-slate-100">
+                        <div class="flex items-center justify-between">
+                            <label class="block text-xs font-bold uppercase text-slate-400 tracking-wider">이름 블라인드 모드</label>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="blind-toggle" onchange="toggleBlindMode(this.checked)" class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                        </div>
+                        <p class="text-[11px] text-slate-400">활성화 시 이름이 숨겨집니다. 해당 자리를 마우스로 클릭하면 이름이 화려하게 밝혀집니다.</p>
+                    </div>
+                </div>
+
+                <!-- 3. 빠른 배치 제어 버튼 (동적 셔플링 연출 지원) -->
+                <button id="shuffle-btn" onclick="generateSeating()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all duration-150 transform active:scale-98 flex items-center justify-center gap-2 text-base">
+                    <i class="fa-solid fa-shuffle text-lg animate-pulse"></i>
+                    <span id="shuffle-btn-text">무작위 자리 배치 시작</span>
+                </button>
+
+                <!-- 4. 저장 및 불러오기 프리셋 -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-5 bg-indigo-600 rounded-full"></span>
+                            <h2 class="font-bold text-slate-900 text-lg">기억된 배치 저장</h2>
+                        </div>
+                        <span class="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded">자동 저장 중</span>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <input type="text" id="preset-name" placeholder="예: 1학년 3반" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button onclick="savePreset()" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold shrink-0 transition-all">
+                            저장
+                        </button>
+                    </div>
+
+                    <div id="presets-list" class="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                        <!-- 동적으로 프리셋 생성됨 -->
+                        <p class="text-xs text-slate-400 text-center py-2">저장된 배치 기록이 없습니다.</p>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- 오른쪽 자리배치 시각화 화면 (실제 프린트 영역) -->
+            <main class="lg:col-span-8 space-y-6 print-area">
+                <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 md:p-8 flex flex-col min-h-[600px] justify-between relative overflow-hidden">
+                    
+                    <div>
+                        <!-- 실시간 상태 알림 표시줄 -->
+                        <div class="no-print flex flex-wrap justify-between items-center gap-2 mb-6">
+                            <span id="status-badge" class="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-semibold rounded-full flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-slate-400"></span> 대기 중 (인원을 구성하고 배치해 주세요)
+                            </span>
+                            <div class="flex items-center gap-1">
+                                <button onclick="pickRandomWinner()" id="picker-btn" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> 발표자 뽑기
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 칠판 영역 (교실의 앞쪽을 가리키는 고정 헤더) -->
+                        <div id="blackboard-area" class="w-full py-3 bg-slate-800 text-slate-100 rounded-2xl shadow-inner text-center font-bold tracking-widest text-sm md:text-base mb-10 flex items-center justify-center gap-2 border-b-4 border-slate-900">
+                            <i class="fa-solid fa-chalkboard text-slate-400"></i>
+                            <span id="blackboard-text">［ 앞 쪽 - 칠판 ］</span>
+                        </div>
+
+                        <!-- 교탁 위치 표시 -->
+                        <div id="teacher-desk" class="flex justify-center mb-8">
+                            <div class="px-6 py-2 bg-stone-100 border border-stone-200 text-stone-600 text-xs font-semibold rounded-lg shadow-inner flex items-center gap-2">
+                                <i class="fa-solid fa-user-tie"></i> 교탁 위치
+                            </div>
+                        </div>
+
+                        <!-- 자리 격자 배치 영역 -->
+                        <div id="seating-grid" class="grid gap-3 transition-all duration-300">
+                            <!-- JS를 통해 가로 열에 맞춰 자리가 동적 생성됩니다. -->
+                        </div>
+                    </div>
+
+                </div>
+            </main>
+
+        </div>
+
+        <!-- 하단 정보 가이드 및 저작권 정보 (전체 화면 하단 중앙 정렬 고정) -->
+        <footer class="no-print mt-12 border-t border-slate-200 pt-8 pb-4 text-center space-y-4 w-full">
+            <div class="flex items-center justify-center gap-2 text-xs text-slate-400 px-4">
+                <i class="fa-solid fa-circle-info text-slate-300 shrink-0"></i>
+                <span>자리를 드래그해서 위치를 맞바꿀 수 있습니다. (자물쇠 아이콘을 클릭하면 자리가 완전히 고정됩니다)</span>
+            </div>
+            <div class="text-xs text-slate-400 flex flex-col items-center gap-1">
+                <span>Made with <span class="text-indigo-500">♥</span> SMART SEATING</span>
+                <span class="text-[10px] text-slate-400 font-semibold">Copyright &copy; 2026 <b>김깐깐</b>. All Rights Reserved.</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 토스트 메시지 안내창 -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 no-print"></div>
+
+    <script>
+        // 학급 구성 상태
+        let appState = {
+            inputMode: 'names', // 'names' | 'count'
+            columns: 6,
+            viewDirection: 'front', // 'front' | 'back'
+            students: [],
+            seats: [], // { id, name, isEmpty, isLocked, isRevealed, originalName } 구조의 배열
+            presets: [],
+            isBlindMode: false, // 신규: 이름 가림 상태 플래그
+            isAnimating: false  // 신규: 3초 셔플 모션 애니메이션 진행 여부
+        };
+
+        // 오디오 효과음 컨텍스트 설정 (웹 브라우저 내부 오디오 신디사이저)
+        let audioCtx = null;
+        function playSynthSound(freq, type, duration) {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {
+                // 오디오 재생을 미지원하거나 상호작용 제한 시 예외 처리 무시
+            }
+        }
+
+        // 초기 화면 세팅 및 로컬 스토리지 로드
+        window.onload = function() {
+            loadPresetsFromLocal();
+            
+            // 데모 학급 이름 세팅 및 최초 생성
+            loadDemoClass();
+            generateSeating();
+            
+            // 이벤트 리스너 추가 (이름 작성 시 카운트 감지)
+            document.getElementById('students-list').addEventListener('input', updateTextareaNameCount);
+        };
+
+        // 토스트 알림 메시지 빌더
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let icon = 'fa-circle-check';
+            let colorClasses = 'bg-white border-l-4 border-emerald-500 text-slate-800';
+            
+            if (type === 'error') {
+                icon = 'fa-circle-exclamation';
+                colorClasses = 'bg-white border-l-4 border-rose-500 text-slate-800';
+            } else if (type === 'info') {
+                icon = 'fa-circle-info';
+                colorClasses = 'bg-white border-l-4 border-indigo-500 text-slate-800';
+            }
+
+            toast.className = `flex items-center gap-3 p-4 rounded-xl shadow-lg border border-slate-100 min-w-[280px] max-w-sm transition-all duration-300 ${colorClasses}`;
+            toast.innerHTML = `
+                <i class="fa-solid ${icon} text-lg shrink-0"></i>
+                <div class="text-xs font-semibold">${message}</div>
+            `;
+            
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-[-10px]');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // 입력 모드 체인지 (이름 직접 입력 / 숫자만 입력)
+        function switchInputMode(mode) {
+            if (appState.isAnimating) return;
+            appState.inputMode = mode;
+            
+            const btnNames = document.getElementById('mode-names');
+            const btnCount = document.getElementById('mode-count');
+            const secNames = document.getElementById('section-names');
+            const secCount = document.getElementById('section-count');
+
+            if (mode === 'names') {
+                btnNames.className = "py-2 text-sm font-semibold rounded-lg text-indigo-700 bg-white shadow-sm transition-all";
+                btnCount.className = "py-2 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-800 transition-all";
+                secNames.classList.remove('hidden');
+                secCount.classList.add('hidden');
+            } else {
+                btnNames.className = "py-2 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-800 transition-all";
+                btnCount.className = "py-2 text-sm font-semibold rounded-lg text-indigo-700 bg-white shadow-sm transition-all";
+                secNames.classList.add('hidden');
+                secCount.classList.remove('hidden');
+            }
+        }
+
+        // 학급 데모 명단 자동 생성기
+        function loadDemoClass() {
+            if (appState.isAnimating) return;
+            const demoNames = [
+		"학생1", "학생2", "학생3", "학생4", "학생5",
+		"학생6", "학생7", "학생8", "학생9", "학생10",
+		"학생11", "학생12", "학생13", "학생14", "학생15",
+		"학생16", "학생17", "학생18", "학생19", "학생20",
+		"학생21", "학생22", "학생23", "학생24", "학생25",
+		"학생26", "학생27", "학생28", "학생29", "학생30"
+            ];
+            document.getElementById('students-list').value = demoNames.join('\n');
+            updateTextareaNameCount();
+            showToast("30명의 예시 학생 명단을 불러왔습니다.", "info");
+        }
+
+        // 작성된 이름 카운트 표시 업데이트
+        function updateTextareaNameCount() {
+            const rawText = document.getElementById('students-list').value;
+            const names = parseStudentNames(rawText);
+            document.getElementById('name-count-display').textContent = `작성한 학생: ${names.length}명`;
+        }
+
+        // 이름 입력값 가공 및 분해
+        function parseStudentNames(text) {
+            return text
+                .split(/[\n,]+/) // 줄바꿈 또는 쉼표 기준 분리
+                .map(name => name.trim())
+                .filter(name => name.length > 0);
+        }
+
+        // 가로 열 갱신 함수
+        function updateColumns(value) {
+            appState.columns = parseInt(value);
+            document.getElementById('col-val').textContent = `${value}열 배치`;
+            renderGrid();
+        }
+
+        // 칠판 가시 정렬 방향 변경
+        function switchViewMode(direction) {
+            if (appState.isAnimating) return;
+            appState.viewDirection = direction;
+            
+            const btnFront = document.getElementById('view-front');
+            const btnBack = document.getElementById('view-back');
+            const blackboardText = document.getElementById('blackboard-text');
+            const blackboardArea = document.getElementById('blackboard-area');
+            const teacherDesk = document.getElementById('teacher-desk');
+
+            if (direction === 'front') {
+                btnFront.className = "py-2 px-3 border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all";
+                btnBack.className = "py-2 px-3 border border-slate-200 bg-white text-slate-600 font-medium rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-slate-50 transition-all";
+                blackboardText.textContent = "［ 앞 쪽 - 칠판 ］";
+                // 칠판 및 교탁을 상단에 고정
+                blackboardArea.parentNode.insertBefore(blackboardArea, blackboardArea.parentNode.firstChild);
+                blackboardArea.parentNode.insertBefore(teacherDesk, blackboardArea.nextSibling);
+            } else {
+                btnBack.className = "py-2 px-3 border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all";
+                btnFront.className = "py-2 px-3 border border-slate-200 bg-white text-slate-600 font-medium rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-slate-50 transition-all";
+                blackboardText.textContent = "［ 뒤 쪽 - 사물함 / 창문 ］";
+                // 칠판 및 교탁을 맨 아래로 이동
+                const grid = document.getElementById('seating-grid');
+                grid.parentNode.appendChild(blackboardArea);
+                grid.parentNode.appendChild(teacherDesk);
+            }
+            showToast("정렬 기준이 전환되었습니다.", "info");
+        }
+
+        // 신규: 이름 블라인드 모드 제어
+        function toggleBlindMode(checked) {
+            appState.isBlindMode = checked;
+            
+            // 블라인드 해제 시, 모든 자리가 자동으로 보이도록 처리
+            appState.seats.forEach(seat => {
+                if (!checked) {
+                    seat.isRevealed = true;
+                } else {
+                    seat.isRevealed = false; // 블라인드 설정 시 다시 가림
+                }
+            });
+            renderGrid();
+            
+            if (checked) {
+                showToast("이름 블라인드 모드가 활성화되었습니다. 자리를 클릭해 이름을 확인하세요!", "info");
+            } else {
+                showToast("블라인드가 해제되어 모든 이름이 공개됩니다.", "info");
+            }
+        }
+
+        // 메인 무작위 자리배치 알고리즘 구동 (3초간 섞이는 실시간 연출 포함)
+        function generateSeating() {
+            if (appState.isAnimating) return; // 이미 연출 진행 중이면 중복 실행 방지
+
+            let names = [];
+
+            if (appState.inputMode === 'names') {
+                const text = document.getElementById('students-list').value;
+                names = parseStudentNames(text);
+                if (names.length === 0) {
+                    showToast("이름을 한 줄에 한 명씩 입력해 주세요.", "error");
+                    return;
+                }
+            } else {
+                const count = parseInt(document.getElementById('students-count-input').value);
+                if (isNaN(count) || count < 1) {
+                    showToast("유효한 학생 수를 입력하세요.", "error");
+                    return;
+                }
+                for (let i = 1; i <= count; i++) {
+                    names.push(`${i}번 학생`);
+                }
+            }
+
+            appState.students = [...names];
+            appState.isAnimating = true;
+
+            // UI 비활성화 조치
+            const shuffleBtn = document.getElementById('shuffle-btn');
+            const shuffleText = document.getElementById('shuffle-btn-text');
+            shuffleBtn.disabled = true;
+            shuffleBtn.classList.add('bg-slate-400', 'hover:bg-slate-400', 'cursor-not-allowed');
+            shuffleBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+            document.getElementById('picker-btn').disabled = true;
+
+            let duration = 3000; // 3초 애니메이션 진행
+            let intervalTime = 100; // 100ms마다 이름 무작위 시각 변화
+            let elapsed = 0;
+
+            // 3초간 지속되는 셔플 타이머
+            const shuffleTimer = setInterval(() => {
+                elapsed += intervalTime;
+                
+                // 임시 셔플 배열 생성 후 UI 갱신
+                performSingleShuffleStep(names);
+                
+                // 가속되는 긴장감 유도 비프 효과음 연주
+                const freq = 200 + (elapsed / duration) * 400; // 음높이가 상승함
+                playSynthSound(freq, 'sine', 0.08);
+
+                // 남은 시간 표기 변경
+                const remainingSeconds = ((duration - elapsed) / 1000).toFixed(1);
+                shuffleText.textContent = `배치 중... (${remainingSeconds}초)`;
+
+                if (elapsed >= duration) {
+                    clearInterval(shuffleTimer);
+                    
+                    // 최종 확정 셔플 적용 및 마무리
+                    finalizeShuffle(names);
+                }
+            }, intervalTime);
+        }
+
+        // 단일 임시 셔플 단계를 적용해 화면에 렌더링하는 함수
+        function performSingleShuffleStep(names) {
+            let lockedPositions = {};
+            let lockedNames = new Set();
+            if (appState.seats && appState.seats.length > 0) {
+                appState.seats.forEach((seat, index) => {
+                    if (seat.isLocked) {
+                        lockedPositions[index] = { ...seat };
+                        if (!seat.isEmpty && seat.name) {
+                            lockedNames.add(seat.name);
+                        }
+                    }
+                });
+            }
+
+            let namesToShuffle = names.filter(name => !lockedNames.has(name));
+            
+            // 피셔-예이츠 셔플
+            for (let i = namesToShuffle.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [namesToShuffle[i], namesToShuffle[j]] = [namesToShuffle[j], namesToShuffle[i]];
+            }
+
+            let maxLockedIndex = -1;
+            Object.keys(lockedPositions).forEach(idx => {
+                maxLockedIndex = Math.max(maxLockedIndex, parseInt(idx));
+            });
+
+            let newSeats = [];
+            let shuffleIndex = 0;
+            let currentIdx = 0;
+
+            while (shuffleIndex < namesToShuffle.length || currentIdx <= maxLockedIndex) {
+                if (lockedPositions[currentIdx]) {
+                    newSeats.push({
+                        id: currentIdx,
+                        name: lockedPositions[currentIdx].name,
+                        isEmpty: lockedPositions[currentIdx].isEmpty,
+                        isLocked: true,
+                        isRevealed: lockedPositions[currentIdx].isRevealed || false,
+                        originalName: lockedPositions[currentIdx].originalName
+                    });
+                } else {
+                    if (shuffleIndex < namesToShuffle.length) {
+                        newSeats.push({
+                            id: currentIdx,
+                            name: namesToShuffle[shuffleIndex],
+                            isEmpty: false,
+                            isLocked: false,
+                            isRevealed: false
+                        });
+                        shuffleIndex++;
+                    } else {
+                        newSeats.push({
+                            id: currentIdx,
+                            name: '',
+                            isEmpty: true,
+                            isLocked: false,
+                            isRevealed: false
+                        });
+                    }
+                }
+                currentIdx++;
+            }
+
+            appState.seats = newSeats;
+            renderGrid();
+        }
+
+        // 최종 3초 완료 시 자리 확정 및 성공음 연주
+        function finalizeShuffle(names) {
+            // 완전히 자리를 마지막으로 섞음
+            performSingleShuffleStep(names);
+
+            // 신규 배치 시, 가림 모드 상태라면 각 카드들의 공개 여부(isRevealed)는 모두 닫힘 상태로 재설정
+            appState.seats.forEach(seat => {
+                seat.isRevealed = !appState.isBlindMode;
+            });
+
+            appState.isAnimating = false;
+
+            // UI 제어 장치 원상 복구
+            const shuffleBtn = document.getElementById('shuffle-btn');
+            const shuffleText = document.getElementById('shuffle-btn-text');
+            shuffleBtn.disabled = false;
+            shuffleBtn.classList.remove('bg-slate-400', 'hover:bg-slate-400', 'cursor-not-allowed');
+            shuffleBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+            shuffleText.textContent = "무작위 자리 배치 시작";
+            document.getElementById('picker-btn').disabled = false;
+
+            // 아름다운 완료 연음 연주
+            playSynthSound(523.25, 'triangle', 0.15); // 도
+            setTimeout(() => playSynthSound(659.25, 'triangle', 0.15), 100);  // 미
+            setTimeout(() => playSynthSound(783.99, 'triangle', 0.3), 200);   // 솔
+
+            // 전체 리렌더링
+            renderGrid();
+            
+            // 상태 표시 바 업데이트
+            const activeCount = appState.seats.filter(s => !s.isEmpty).length;
+            document.getElementById('status-badge').innerHTML = `
+                <span class="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></span> 자리 배치 완료 (${activeCount}명 배치됨)
+            `;
+            
+            if (appState.isBlindMode) {
+                showToast("자리가 완벽하게 배치되었습니다! 자리를 하나씩 열어서 주인공을 찾으세요.", "success");
+            } else {
+                showToast("3초의 공정한 랜덤 셔플이 완료되었습니다!", "success");
+            }
+        }
+
+        // 자릿수 격자 그리기
+        function renderGrid() {
+            const gridContainer = document.getElementById('seating-grid');
+            gridContainer.innerHTML = '';
+
+            const cols = appState.columns;
+            const seats = appState.seats;
+
+            if (seats.length === 0) {
+                gridContainer.innerHTML = `
+                    <div class="col-span-full py-16 text-center text-slate-400 font-medium">
+                        좌측의 자리배치 시작 버튼을 눌러 자리를 완성해 보세요.
+                    </div>
+                `;
+                return;
+            }
+
+            // Dynamic grid columns 설정
+            gridContainer.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+
+            seats.forEach((seat, index) => {
+                const seatCard = document.createElement('div');
+                
+                // 기본 카드 스타일 및 고정 시 테두리 하이라이트 스타일 분기
+                let cardClass = `desk-card bg-slate-50 border-2 border-slate-200 rounded-2xl p-3 md:p-4 text-center select-none shadow-sm transition-all duration-150 flex flex-col justify-between min-h-[75px] md:min-h-[90px] relative`;
+                
+                if (seat.isLocked) {
+                    cardClass += ` border-amber-400 bg-amber-50/40 ring-2 ring-amber-200 shadow-md shadow-amber-50`;
+                } else {
+                    cardClass += ` hover:shadow-md hover:border-indigo-400`;
+                }
+
+                // 무작위 셔플링 연출 중일 때 고정 카드가 아니면 격렬히 흔들리는 시각 효과 추가
+                if (appState.isAnimating && !seat.isLocked && !seat.isEmpty) {
+                    cardClass += ` animate-shake`;
+                }
+                
+                seatCard.className = cardClass;
+                
+                // 드래그 허용 조건 (고정 상태이거나 애니메이션 구동 중에는 드래그 차단)
+                if (seat.isLocked || appState.isAnimating) {
+                    seatCard.setAttribute('draggable', 'false');
+                    seatCard.classList.add('cursor-not-allowed');
+                } else {
+                    seatCard.setAttribute('draggable', 'true');
+                    seatCard.classList.add('cursor-move');
+                }
+                
+                seatCard.setAttribute('data-index', index);
+                
+                // 번호 표시
+                const seatNo = document.createElement('span');
+                seatNo.className = 'absolute top-1.5 left-2 text-[10px] font-bold text-slate-400';
+                seatNo.textContent = index + 1;
+                seatCard.appendChild(seatNo);
+
+                // 고정 여부 잠금 자물쇠 아이콘 버튼 추가
+                const lockControl = document.createElement('button');
+                lockControl.className = `absolute top-1 left-6 text-xs ${seat.isLocked ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'} transition-all no-print p-1`;
+                lockControl.innerHTML = seat.isLocked ? `<i class="fa-solid fa-lock"></i>` : `<i class="fa-solid fa-lock-open opacity-30 hover:opacity-100"></i>`;
+                lockControl.title = seat.isLocked ? '자리 고정 해제' : '자리 고정하기';
+                lockControl.onclick = (e) => {
+                    e.stopPropagation();
+                    if (appState.isAnimating) return;
+                    toggleLockSeat(index);
+                };
+                seatCard.appendChild(lockControl);
+
+                // 이름 표현 구조부 (블라인드 체크 포함)
+                const nameLabel = document.createElement('div');
+                
+                if (!seat.isEmpty) {
+                    // 블라인드 모드 활성화 상태 && 아직 열어보지 않은 자리인 경우 감추기
+                    if (appState.isBlindMode && !seat.isRevealed) {
+                        nameLabel.className = 'bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-600 font-bold text-[10px] md:text-xs py-1.5 px-1 rounded-xl cursor-pointer transition-all mt-3 shadow-inner flex items-center justify-center gap-1';
+                        nameLabel.innerHTML = `<i class="fa-solid fa-eye-slash text-[9px]"></i> ❓ 확인`;
+                        
+                        // 전체 카드 영역을 눌러도 확인되게 클릭 핸들러 추가
+                        seatCard.addEventListener('click', (e) => {
+                            if (e.target.closest('button')) return; // 도구 버튼 클릭 예외
+                            revealSeatName(index);
+                        });
+                    } else {
+                        // 정상 공개 상태
+                        nameLabel.className = 'font-bold text-sm md:text-base text-slate-800 tracking-wide mt-3 truncate';
+                        nameLabel.textContent = seat.name;
+                        
+                        // 블라인드 모드 중 이미 확인된 자리라면 깨알 배지 추가
+                        if (appState.isBlindMode && seat.isRevealed) {
+                            const revealedBadge = document.createElement('span');
+                            revealedBadge.className = 'block text-[8px] bg-emerald-100 text-emerald-700 font-semibold rounded-full px-1 py-0.2 w-max mx-auto mt-0.5 animate-pulse';
+                            revealedBadge.textContent = '확인됨';
+                            nameLabel.appendChild(revealedBadge);
+                        }
+                    }
+                } else {
+                    nameLabel.className = 'font-bold text-sm md:text-base text-slate-800 tracking-wide mt-3 truncate';
+                    nameLabel.textContent = '';
+                }
+                
+                seatCard.appendChild(nameLabel);
+
+                // 빈 자리 처리용 체크 뱃지 (마우스 호버 시 보임)
+                const emptyControl = document.createElement('button');
+                emptyControl.className = 'absolute top-1 right-1.5 text-[10px] text-slate-300 hover:text-rose-500 transition-all no-print p-1';
+                emptyControl.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
+                emptyControl.title = '빈 자리 설정';
+                emptyControl.onclick = (e) => {
+                    e.stopPropagation();
+                    if (appState.isAnimating) return;
+                    toggleEmptySeat(index);
+                };
+                seatCard.appendChild(emptyControl);
+
+                // 빈자리인 경우의 시각화 처리
+                if (seat.isEmpty) {
+                    seatCard.className = `desk-card bg-stone-100 border-2 border-dashed border-stone-300 rounded-2xl p-3 md:p-4 text-center cursor-pointer hover:border-indigo-400 transition-all duration-150 flex flex-col justify-center min-h-[75px] md:min-h-[90px] relative opacity-60`;
+                    nameLabel.textContent = '(빈 자리)';
+                    nameLabel.className = 'font-semibold text-xs text-stone-400 tracking-wide mt-1';
+                    emptyControl.innerHTML = `<i class="fa-solid fa-rotate"></i>`;
+                    emptyControl.title = '학생 할당';
+                }
+
+                // 드래그 앤 드롭 웹 API 기능 연동 (PC / 노트북 환경)
+                if (!appState.isAnimating) {
+                    seatCard.addEventListener('dragstart', handleDragStart);
+                    seatCard.addEventListener('dragover', handleDragOver);
+                    seatCard.addEventListener('dragleave', handleDragLeave);
+                    seatCard.addEventListener('drop', handleDrop);
+                    seatCard.addEventListener('dragend', handleDragEnd);
+                    // 모바일 터치식 자리 이동 처리 연동
+                    setupTouchEvents(seatCard);
+                }
+
+                gridContainer.appendChild(seatCard);
+            });
+        }
+
+        // 블라인드 처리된 특정 카드를 클릭 시 공개
+        function revealSeatName(index) {
+            if (appState.isAnimating) return;
+            if (appState.seats[index].isEmpty) return;
+            if (appState.seats[index].isRevealed) return;
+
+            appState.seats[index].isRevealed = true;
+            
+            // 아름답고 경쾌한 팝 효과음 연주
+            playSynthSound(880, 'sine', 0.15); // 높은 라 음(A5)
+            
+            renderGrid();
+            showToast(`${index + 1}번 자리의 주인공은 [ ${appState.seats[index].name} ] 학생입니다!`, "info");
+        }
+
+        // 모바일 기기를 위한 터치(Swipe / TouchSwap) 지원
+        let activeTouchSourceIndex = null;
+        
+        function setupTouchEvents(element) {
+            element.addEventListener('touchstart', function(e) {
+                if (appState.isAnimating) return;
+                // 상호작용 가능한 버튼 클릭 시 무시
+                if (e.target.closest('button')) return;
+                
+                const idx = parseInt(this.getAttribute('data-index'));
+                
+                // 만약 터치 대상이 고정석이면 드래그 불가 알림 후 취소
+                if (appState.seats[idx].isLocked) {
+                    showToast("고정된 자리는 위치를 바꿀 수 없습니다. 자물쇠를 풀어주세요.", "error");
+                    playSynthSound(300, 'sawtooth', 0.15);
+                    return;
+                }
+
+                activeTouchSourceIndex = idx;
+                
+                // 시각적으로 현재 터치 요소 선택된 상태인지 표기
+                this.classList.add('bg-indigo-50', 'border-indigo-500');
+            }, { passive: true });
+
+            element.addEventListener('touchend', function(e) {
+                if (appState.isAnimating) return;
+                if (activeTouchSourceIndex === null) return;
+
+                const targetEl = document.elementFromPoint(
+                    e.changedTouches[0].clientX,
+                    e.changedTouches[0].clientY
+                );
+                
+                const dropTarget = targetEl ? targetEl.closest('.desk-card') : null;
+                this.classList.remove('bg-indigo-50', 'border-indigo-500');
+
+                if (dropTarget) {
+                    const targetIndex = parseInt(dropTarget.getAttribute('data-index'));
+                    if (activeTouchSourceIndex !== targetIndex) {
+                        // 교환 위치 둘 중 하나라도 고정이 활성화되어 있다면 무시 처리
+                        if (appState.seats[activeTouchSourceIndex].isLocked || appState.seats[targetIndex].isLocked) {
+                            showToast("고정된 자리가 포함되어 있어 위치를 바꿀 수 없습니다.", "error");
+                            playSynthSound(300, 'sawtooth', 0.15);
+                        } else {
+                            swapSeatsData(activeTouchSourceIndex, targetIndex);
+                        }
+                    }
+                }
+                activeTouchSourceIndex = null;
+            }, { passive: true });
+        }
+
+        // 자리 고정 설정/해제 토글
+        function toggleLockSeat(index) {
+            appState.seats[index].isLocked = !appState.seats[index].isLocked;
+            if (appState.seats[index].isLocked) {
+                showToast(`${index+1}번 자리가 단단히 고정되었습니다. 무작위 배치 시 유지됩니다.`, "info");
+                playSynthSound(600, 'triangle', 0.15);
+            } else {
+                showToast(`${index+1}번 자리의 고정을 해제하였습니다.`, "info");
+                playSynthSound(450, 'triangle', 0.1);
+            }
+            renderGrid();
+        }
+
+        // 특정 자리를 공석(빈 자리)으로 비우는 행위 처리
+        function toggleEmptySeat(index) {
+            appState.seats[index].isEmpty = !appState.seats[index].isEmpty;
+            
+            if (appState.seats[index].isEmpty) {
+                // 원래 있던 사람 이름을 보관하고 빈 처리
+                appState.seats[index].originalName = appState.seats[index].name;
+                appState.seats[index].name = '';
+                showToast(`${index+1}번 자리를 공석으로 지정했습니다.`, "info");
+            } else {
+                appState.seats[index].name = appState.seats[index].originalName || `${index+1}번 학생`;
+                // 원복 시 블라인드가 활성화되어 있다면 기본 숨김 유지
+                appState.seats[index].isRevealed = !appState.isBlindMode;
+                showToast(`${index+1}번 자리에 다시 학생을 배치했습니다.`, "info");
+            }
+            playSynthSound(440, 'triangle', 0.1);
+            renderGrid();
+        }
+
+        // 드래그 앤 드롭 핸들러 함수군
+        let dragSourceIndex = null;
+
+        function handleDragStart(e) {
+            const idx = parseInt(this.getAttribute('data-index'));
+            // 고정된 좌석은 드래그 시작 불가
+            if (appState.seats[idx].isLocked) {
+                e.preventDefault();
+                return;
+            }
+            dragSourceIndex = idx;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', dragSourceIndex);
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            this.classList.add('drag-over');
+            return false;
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            
+            const targetIndex = parseInt(this.getAttribute('data-index'));
+            const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'));
+
+            if (sourceIndex !== targetIndex) {
+                // 상호 교환 좌석 중 고정석이 포함되어 있는지 최종 체크
+                if (appState.seats[sourceIndex].isLocked || appState.seats[targetIndex].isLocked) {
+                    showToast("고정된 자리는 위치를 바꿀 수 없습니다. 자물쇠를 풀어주세요.", "error");
+                    playSynthSound(300, 'sawtooth', 0.15);
+                } else {
+                    swapSeatsData(sourceIndex, targetIndex);
+                }
+            }
+            return false;
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            const cards = document.querySelectorAll('.desk-card');
+            cards.forEach(card => card.classList.remove('drag-over'));
+        }
+
+        // 실제 데이터를 변경하고 다시 그리는 교환 로직
+        function swapSeatsData(idx1, idx2) {
+            const temp = { ...appState.seats[idx1] };
+            appState.seats[idx1] = { ...appState.seats[idx2] };
+            appState.seats[idx2] = temp;
+            
+            // 데이터 교정 이후 렌더링
+            renderGrid();
+            playSynthSound(587.33, 'sine', 0.15); // 레 (D5)
+            showToast("자리가 서로 교체되었습니다.", "success");
+        }
+
+        // 발표자/도우미 랜덤 1인 추첨 기능
+        function pickRandomWinner() {
+            if (appState.isAnimating) return;
+            
+            // 공석을 제외하고 실제 이름을 가진 가려지지 않은(또는 블라인드여도 실제 학생인) 전원 대상
+            const validStudents = appState.seats.filter(seat => !seat.isEmpty && seat.name.trim() !== '');
+            if (validStudents.length === 0) {
+                showToast("선택 가능한 학생이 없습니다.", "error");
+                return;
+            }
+
+            const pickerBtn = document.getElementById('picker-btn');
+            pickerBtn.disabled = true;
+
+            const cards = document.querySelectorAll('.desk-card');
+            let cycleCount = 0;
+            const totalCycles = 25; // 깜빡임 반복 횟수
+            let delay = 60;
+            let lastIndex = -1;
+
+            function runCycle() {
+                // 이전 강조 제거
+                if (lastIndex !== -1) {
+                    cards[lastIndex].classList.remove('border-amber-500', 'bg-amber-100', 'scale-105', 'ring-4', 'ring-amber-400');
+                    // 고정 카드였던 경우 고정 카드 고유의 보더 테두리 복원
+                    if (appState.seats[lastIndex].isLocked) {
+                        cards[lastIndex].classList.add('border-amber-400');
+                    }
+                }
+
+                // 무작위 자리 고르기 (공석 제외)
+                let randomIndex;
+                do {
+                    randomIndex = Math.floor(Math.random() * cards.length);
+                } while (appState.seats[randomIndex].isEmpty);
+
+                // 현재 돌고 있는 시점에만 강조 스타일링 적용
+                cards[randomIndex].classList.remove('border-amber-400');
+                cards[randomIndex].classList.add('border-amber-500', 'bg-amber-100', 'scale-105', 'ring-4', 'ring-amber-400');
+                lastIndex = randomIndex;
+                
+                // 가벼운 전자음 삑 소리 재생
+                playSynthSound(400 + (cycleCount * 20), 'sine', 0.05);
+
+                cycleCount++;
+                if (cycleCount < totalCycles) {
+                    // 속도가 점점 느려지며 박진감을 더하는 로직
+                    if (cycleCount > 15) delay += 35;
+                    setTimeout(runCycle, delay);
+                } else {
+                    // 최종 선택 학생 낙점 및 강제 이름 공개(블라인드 모드일지라도 즉각 공개)
+                    appState.seats[lastIndex].isRevealed = true;
+                    renderGrid();
+
+                    const winnerName = appState.seats[lastIndex].name;
+                    
+                    // 화려한 당첨 사운드 실행
+                    playSynthSound(523.25, 'triangle', 0.15); // C5
+                    setTimeout(() => playSynthSound(659.25, 'triangle', 0.15), 100); // E5
+                    setTimeout(() => playSynthSound(783.99, 'triangle', 0.15), 200); // G5
+                    setTimeout(() => playSynthSound(1046.50, 'triangle', 0.4), 300); // C6
+
+                    // 다시 찾아낸 엘리먼트에 당첨 클래스 시각화 강화
+                    const finalCards = document.querySelectorAll('.desk-card');
+                    finalCards[lastIndex].classList.add('bg-emerald-500', 'text-white', 'border-emerald-600', 'animate-pulse');
+                    
+                    const winnerLabel = finalCards[lastIndex].querySelector('div');
+                    if (winnerLabel) {
+                        winnerLabel.classList.add('text-white');
+                    }
+
+                    showToast(`축하합니다! 발표할 사람: 🎉 ${winnerName} 🎉`, "success");
+
+                    // 5초간 강조 유지 후 복구
+                    setTimeout(() => {
+                        if (finalCards[lastIndex]) {
+                            finalCards[lastIndex].classList.remove('bg-emerald-500', 'text-white', 'border-emerald-600', 'scale-105', 'ring-4', 'ring-amber-400', 'animate-pulse');
+                            if (winnerLabel) {
+                                winnerLabel.classList.remove('text-white');
+                            }
+                        }
+                        renderGrid();
+                        pickerBtn.disabled = false;
+                    }, 5000);
+                }
+            }
+
+            runCycle();
+        }
+
+        // 브라우저의 로컬 스토리지 데이터 제어 함수군
+        function savePreset() {
+            const nameInput = document.getElementById('preset-name');
+            const name = nameInput.value.trim();
+
+            if (!name) {
+                showToast("저장할 이름(학급구분 등)을 입력해 주세요.", "error");
+                return;
+            }
+
+            if (appState.seats.length === 0) {
+                showToast("먼저 무작위 자리를 배치해 주세요.", "error");
+                return;
+            }
+
+            const newPreset = {
+                id: Date.now(),
+                name: name,
+                columns: appState.columns,
+                inputMode: appState.inputMode,
+                seats: JSON.parse(JSON.stringify(appState.seats)),
+                students: [...appState.students]
+            };
+
+            // 기존 목록에 병합
+            appState.presets = appState.presets.filter(p => p.name !== name); // 중복 방지 교체
+            appState.presets.unshift(newPreset);
+            
+            localStorage.setItem('class_seating_presets', JSON.stringify(appState.presets));
+            
+            nameInput.value = '';
+            showToast(`"${name}" 세팅을 브라우저에 안전하게 저장했습니다.`, "success");
+            renderPresetsList();
+        }
+
+        function loadPresetsFromLocal() {
+            const data = localStorage.getItem('class_seating_presets');
+            if (data) {
+                try {
+                    appState.presets = JSON.parse(data);
+                } catch (e) {
+                    appState.presets = [];
+                }
+            }
+            renderPresetsList();
+        }
+
+        function renderPresetsList() {
+            const container = document.getElementById('presets-list');
+            container.innerHTML = '';
+
+            if (appState.presets.length === 0) {
+                container.innerHTML = `<p class="text-[11px] text-slate-400 text-center py-2">저장된 배치 기록이 없습니다.</p>`;
+                return;
+            }
+
+            appState.presets.forEach(preset => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-100 text-xs transition-all';
+                item.innerHTML = `
+                    <div class="cursor-pointer font-medium text-slate-700 truncate max-w-[130px]" onclick="applyPreset(${preset.id})" title="클릭하여 불러오기">
+                        ${preset.name} (${preset.seats.length}명)
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="applyPreset(${preset.id})" class="text-indigo-600 hover:text-indigo-800 font-bold px-1 py-0.5">
+                            불러오기
+                        </button>
+                        <button onclick="deletePreset(${preset.id})" class="text-rose-500 hover:text-rose-700 px-1 py-0.5" title="삭제">
+                            <i class="fa-regular fa-trash-can"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function applyPreset(id) {
+            if (appState.isAnimating) return;
+            const preset = appState.presets.find(p => p.id === id);
+            if (!preset) return;
+
+            appState.columns = preset.columns;
+            appState.inputMode = preset.inputMode || 'names';
+            appState.seats = JSON.parse(JSON.stringify(preset.seats));
+            appState.students = [...preset.students];
+
+            // UI 제어 장치들의 현재 값 맞춰주기
+            document.getElementById('columns-range').value = preset.columns;
+            document.getElementById('col-val').textContent = `${preset.columns}열 배치`;
+            
+            if (appState.inputMode === 'names') {
+                document.getElementById('students-list').value = preset.students.join('\n');
+                switchInputMode('names');
+            } else {
+                document.getElementById('students-count-input').value = preset.seats.length;
+                switchInputMode('count');
+            }
+
+            // 블라인드 설정이 체크된 상태라면 불러올 때도 블라인드 규칙을 강제 투영시킴
+            appState.seats.forEach(seat => {
+                seat.isRevealed = !appState.isBlindMode;
+            });
+
+            updateTextareaNameCount();
+            renderGrid();
+            
+            // 상태 표시 갱신
+            document.getElementById('status-badge').innerHTML = `
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> 불러오기 완료: ${preset.name}
+            `;
+            document.getElementById('picker-btn').disabled = false;
+
+            showToast(`"${preset.name}" 설정을 정상적으로 적용했습니다.`, "success");
+            playSynthSound(659.25, 'sine', 0.2);
+        }
+
+        function deletePreset(id) {
+            if (appState.isAnimating) return;
+            appState.presets = appState.presets.filter(p => p.id !== id);
+            localStorage.setItem('class_seating_presets', JSON.stringify(appState.presets));
+            renderPresetsList();
+            showToast("선택한 저장 슬롯이 삭제되었습니다.", "info");
+        }
+
+        // 전체 초기화 함수
+        function resetAll() {
+            if (appState.isAnimating) return;
+            appState.students = [];
+            appState.seats = [];
+            
+            document.getElementById('students-list').value = '';
+            document.getElementById('students-count-input').value = 30;
+            document.getElementById('columns-range').value = 6;
+            document.getElementById('col-val').textContent = '6열 배치';
+            
+            // 블라인드 기능 원상 해제
+            appState.isBlindMode = false;
+            document.getElementById('blind-toggle').checked = false;
+
+            updateTextareaNameCount();
+            renderGrid();
+
+            document.getElementById('status-badge').innerHTML = `
+                <span class="w-2 h-2 rounded-full bg-slate-400"></span> 대기 중 (인원을 구성하고 배치해 주세요)
+            `;
+            document.getElementById('picker-btn').disabled = true;
+
+            showToast("기본 정보가 완전히 초기화되었습니다.", "info");
+            playSynthSound(330, 'sine', 0.25);
+        }
+    </script>
+</body>
+</html>
