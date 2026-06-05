@@ -274,7 +274,7 @@
     </div>
 
     <!-- 토스트 메시지 안내창 -->
-    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 no-print"></div>
+    <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-3 no-print items-center w-full max-w-2xl px-4"></div>
 
     <script>
         // 학급 구성 상태
@@ -311,32 +311,41 @@
             }
         }
 
-        // 토스트 알림 메시지 빌더
+        // 토스트 알림 메시지 빌더 (상단 중앙 + 2배 크기 확대 버전)
+        // 토스트 알림 메시지 빌더 (상단 중앙 배치 및 2배 크기 렌더링 버그 수정 버전)
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
             
             let icon = 'fa-circle-check';
-            let colorClasses = 'bg-white border-l-4 border-emerald-500 text-slate-800';
+            let colorClasses = 'bg-white border-l-8 border-emerald-500 text-slate-800';
             
             if (type === 'error') {
                 icon = 'fa-circle-exclamation';
-                colorClasses = 'bg-white border-l-4 border-rose-500 text-slate-800';
+                colorClasses = 'bg-white border-l-8 border-rose-500 text-slate-800';
             } else if (type === 'info') {
                 icon = 'fa-circle-info';
-                colorClasses = 'bg-white border-l-4 border-indigo-500 text-slate-800';
+                colorClasses = 'bg-white border-l-8 border-indigo-500 text-slate-800';
             }
 
-            toast.className = `flex items-center gap-3 p-4 rounded-xl shadow-lg border border-slate-100 min-w-[280px] max-w-sm transition-all duration-300 ${colorClasses}`;
+            // 1. 초기 생성 시 투명(opacity-0)하고 위로 20px 들려있는(translate-y-[-20px]) 상태로 설정합니다.
+            toast.className = `flex items-center gap-6 p-6 md:p-8 rounded-2xl shadow-2xl border border-slate-200 w-full transform transition-all duration-300 opacity-0 translate-y-[-20px] ${colorClasses}`;
             toast.innerHTML = `
-                <i class="fa-solid ${icon} text-lg shrink-0"></i>
-                <div class="text-xs font-semibold">${message}</div>
+                <i class="fa-solid ${icon} text-3xl md:text-4xl shrink-0"></i> 
+                <div class="text-base md:text-xl font-bold tracking-wide">${message}</div>
             `;
             
             container.appendChild(toast);
+            
+            // 2. 브라우저가 요소를 화면에 넣은 것을 인지한 직후(50ms 뒤) 부드럽게 나타나며 내려오도록 만듭니다.
             setTimeout(() => {
-                toast.classList.add('opacity-0', 'translate-y-[-10px]');
-                setTimeout(() => toast.remove(), 300);
+                toast.classList.remove('opacity-0', 'translate-y-[-20px]');
+            }, 50);
+
+            // 3. 3초(3000ms) 동안 화면 정중앙 상단에 크게 유지한 뒤, 다시 부드럽게 위로 올라가며 사라지게 만듭니다.
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-[-20px]');
+                setTimeout(() => toast.remove(), 350);
             }, 3000);
         }
 
@@ -982,29 +991,31 @@
                     renderGrid();
 
                     const winnerName = appState.seats[lastIndex].name;
-                    
+
+	            showToast(`🎉 당첨! [ ${winnerName} ] 학생이 발표자로 선정되었습니다!`, "success");                    
+
                     // 화려한 당첨 사운드 실행
                     playSynthSound(523.25, 'triangle', 0.15); // C5
                     setTimeout(() => playSynthSound(659.25, 'triangle', 0.15), 100); // E5
                     setTimeout(() => playSynthSound(783.99, 'triangle', 0.15), 200); // G5
                     setTimeout(() => playSynthSound(1046.50, 'triangle', 0.4), 300); // C6
 
-                    // 다시 찾아낸 엘리먼트에 당첨 클래스 시각화 강화 (파스텔톤 + 고대비 선명한 글자)
+                    // 다시 찾아낸 엘리먼트에 당첨 클래스 시각화 강화 (파스텔 붉은 배경 + 진한 루비색 고대비 글자)
 const finalCards = document.querySelectorAll('.desk-card');
-finalCards[lastIndex].classList.add('bg-emerald-100', 'border-emerald-400', 'ring-4', 'ring-emerald-300', 'animate-pulse');
+finalCards[lastIndex].classList.add('bg-rose-100', 'border-rose-400', 'ring-4', 'ring-rose-300', 'animate-pulse');
 
 const winnerLabel = finalCards[lastIndex].querySelector('div');
 if (winnerLabel) {
     winnerLabel.classList.remove('text-slate-800'); // 기존 기본 글자색 제거
-    winnerLabel.classList.add('text-emerald-950', 'font-black', 'text-base', 'md:text-lg'); // 진한 이끼색 + 아주 두꺼운 글씨
+    winnerLabel.classList.add('text-rose-950', 'font-black', 'text-base', 'md:text-lg'); // 진한 붉은색 + 아주 두꺼운 글씨체
 }
 
 // 5초간 강조 유지 후 복구
 setTimeout(() => {
     if (finalCards[lastIndex]) {
-        finalCards[lastIndex].classList.remove('bg-emerald-100', 'border-emerald-400', 'ring-4', 'ring-emerald-300', 'scale-105', 'ring-4', 'ring-amber-400', 'animate-pulse');
+        finalCards[lastIndex].classList.remove('bg-rose-100', 'border-rose-400', 'ring-4', 'ring-rose-300', 'scale-105', 'ring-4', 'ring-amber-400', 'animate-pulse');
         if (winnerLabel) {
-            winnerLabel.classList.remove('text-emerald-950', 'font-black', 'text-base', 'md:text-lg');
+            winnerLabel.classList.remove('text-rose-950', 'font-black', 'text-base', 'md:text-lg');
         }
     }
     renderGrid();
