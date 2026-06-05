@@ -989,28 +989,27 @@
                     setTimeout(() => playSynthSound(783.99, 'triangle', 0.15), 200); // G5
                     setTimeout(() => playSynthSound(1046.50, 'triangle', 0.4), 300); // C6
 
-                    // 다시 찾아낸 엘리먼트에 당첨 클래스 시각화 강화
-                    const finalCards = document.querySelectorAll('.desk-card');
-                    finalCards[lastIndex].classList.add('bg-emerald-500', 'text-white', 'border-emerald-600', 'animate-pulse');
-                    
-                    const winnerLabel = finalCards[lastIndex].querySelector('div');
-                    if (winnerLabel) {
-                        winnerLabel.classList.add('text-white');
-                    }
+                    // 다시 찾아낸 엘리먼트에 당첨 클래스 시각화 강화 (파스텔톤 + 고대비 선명한 글자)
+const finalCards = document.querySelectorAll('.desk-card');
+finalCards[lastIndex].classList.add('bg-emerald-100', 'border-emerald-400', 'ring-4', 'ring-emerald-300', 'animate-pulse');
 
-                    showToast(`축하합니다! 발표할 사람: 🎉 ${winnerName} 🎉`, "success");
+const winnerLabel = finalCards[lastIndex].querySelector('div');
+if (winnerLabel) {
+    winnerLabel.classList.remove('text-slate-800'); // 기존 기본 글자색 제거
+    winnerLabel.classList.add('text-emerald-950', 'font-black', 'text-base', 'md:text-lg'); // 진한 이끼색 + 아주 두꺼운 글씨
+}
 
-                    // 5초간 강조 유지 후 복구
-                    setTimeout(() => {
-                        if (finalCards[lastIndex]) {
-                            finalCards[lastIndex].classList.remove('bg-emerald-500', 'text-white', 'border-emerald-600', 'scale-105', 'ring-4', 'ring-amber-400', 'animate-pulse');
-                            if (winnerLabel) {
-                                winnerLabel.classList.remove('text-white');
-                            }
-                        }
-                        renderGrid();
-                        pickerBtn.disabled = false;
-                    }, 5000);
+// 5초간 강조 유지 후 복구
+setTimeout(() => {
+    if (finalCards[lastIndex]) {
+        finalCards[lastIndex].classList.remove('bg-emerald-100', 'border-emerald-400', 'ring-4', 'ring-emerald-300', 'scale-105', 'ring-4', 'ring-amber-400', 'animate-pulse');
+        if (winnerLabel) {
+            winnerLabel.classList.remove('text-emerald-950', 'font-black', 'text-base', 'md:text-lg');
+        }
+    }
+    renderGrid();
+    pickerBtn.disabled = false;
+}, 5000);
                 }
             }
 
